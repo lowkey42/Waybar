@@ -18,6 +18,7 @@ class Workspaces : public AModule, public EventHandler {
  private:
   void onEvent(const Json::Value &ev) override;
   void doUpdate();
+  bool handleScroll(GdkEventScroll* e) override;
   Gtk::Button &addButton(const Json::Value &ws);
   std::string getIcon(const std::string &value, const Json::Value &ws);
 
@@ -25,6 +26,8 @@ class Workspaces : public AModule, public EventHandler {
   Gtk::Box box_;
   // Map from niri workspace id to button.
   std::unordered_map<uint64_t, Gtk::Button> buttons_;
+  uint32_t scroll_cooldown_ = 0;
+  uint32_t last_scroll_event_ = 0;
 };
 
 }  // namespace waybar::modules::niri

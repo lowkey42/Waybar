@@ -95,6 +95,8 @@ auto AModule::update() -> void {
   if (config_["on-update"].isString()) {
     pid_children_.push_back(util::command::forkExec(config_["on-update"].asString()));
   }
+  distance_scrolled_y_ *= 0.99;
+  distance_scrolled_x_ *= 0.99;
 }
 // Get mapping between event name and module action name
 // Then call overridden doAction in order to call appropriate module action
@@ -219,14 +221,18 @@ AModule::SCROLL_DIR AModule::getScrollDir(GdkEventScroll* e) {
         threshold = config_["smooth-scrolling-threshold"].asDouble();
       }
 
-      if (distance_scrolled_y_ < -threshold) {
-        dir = reverse ? SCROLL_DIR::DOWN : SCROLL_DIR::UP;
-      } else if (distance_scrolled_y_ > threshold) {
-        dir = reverse ? SCROLL_DIR::UP : SCROLL_DIR::DOWN;
-      } else if (distance_scrolled_x_ > threshold) {
-        dir = SCROLL_DIR::RIGHT;
-      } else if (distance_scrolled_x_ < -threshold) {
-        dir = SCROLL_DIR::LEFT;
+      if(std::abs(distance_scrolled_y_) > std::abs(distance_scrolled_x_)) {
+        if (distance_scrolled_y_ < -threshold) {
+          dir = reverse ? SCROLL_DIR::DOWN : SCROLL_DIR::UP;
+        } else if (distance_scrolled_y_ > threshold) {
+          dir = reverse ? SCROLL_DIR::UP : SCROLL_DIR::DOWN;
+        }
+      } else {
+        if (distance_scrolled_x_ > threshold) {
+          dir = SCROLL_DIR::RIGHT;
+        } else if (distance_scrolled_x_ < -threshold) {
+          dir = SCROLL_DIR::LEFT;
+        }
       }
 
       switch (dir) {

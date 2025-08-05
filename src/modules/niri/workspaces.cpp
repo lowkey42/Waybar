@@ -7,7 +7,8 @@
 namespace waybar::modules::niri {
 
 Workspaces::Workspaces(const std::string &id, const Bar &bar, const Json::Value &config)
-    : AModule(config, "workspaces", id, false, false), bar_(bar), box_(bar.orientation, 0) {
+    : AModule(config, "workspaces", id, false, false), bar_(bar), box_(bar.orientation, 0)
+    , scroll_cooldown_(config_["scroll-cooldown"].asUInt()) {
   box_.set_name("workspaces");
   if (!id.empty()) {
     box_.get_style_context()->add_class(id);
@@ -21,6 +22,12 @@ Workspaces::Workspaces(const std::string &id, const Bar &bar, const Json::Value 
   gIPC->registerForIPC("WorkspaceActivated", this);
   gIPC->registerForIPC("WorkspaceActiveWindowChanged", this);
   gIPC->registerForIPC("WorkspaceUrgencyChanged", this);
+  
+  if (config_["enable-bar-scroll"].asBool()) {
+    auto &window = const_cast<Bar &>(bar_).window;
+    window.add_events(Gdk::SCROLL_MASK | Gdk::SMOOTH_SCROLL_MASK);
+    window.signal_scroll_event().connect(sigc::mem_fun(*this, &Workspaces::handleScroll));
+  }
 
   dp.emit();
 }
@@ -191,6 +198,51 @@ std::string Workspaces::getIcon(const std::string &value, const Json::Value &ws)
   if (icons["default"]) return icons["default"].asString();
 
   return value;
+}
+
+bool Workspaces::handleScroll(GdkEventScroll *e) {
+  // Ignore emulated scroll events on window
+  if (gdk_event_get_pointer_emulated((GdkEvent *)e)) {
+    return false;
+  }
+  auto dir = AModule::getScrollDir(e);
+  if (dir == SCROLL_DIR::NONE) {
+    return true;
+  }
+  
+  if(e->time < scroll_cooldown_ + last_scroll_event_)
+    return true;
+    
+  last_scroll_event_ = e->time;
+
+  try {
+    // {"Action":{"...": {}}}
+    Json::Value request(Json::objectValue);
+    auto &action = (request["Action"] = Json::Value(Json::objectValue));
+      
+    switch(dir) {
+      case SCROLL_DIR::UP:
+        action["FocusWindowOrWorkspaceUp"] = Json::Value(Json::objectValue);
+        break;
+      case SCROLL_DIR::DOWN:
+        action["FocusWindowOrWorkspaceDown"] = Json::Value(Json::objectValue);
+        break;
+      case SCROLL_DIR::LEFT:
+        action["FocusColumnLeftOrLast"] = Json::Value(Json::objectValue);
+        break;
+      case SCROLL_DIR::RIGHT:
+        action["FocusColumnRightOrFirst"] = Json::Value(Json::objectValue);
+        break;
+      default:
+        return true;
+    }
+    
+    IPC::send(request);
+  } catch (const std::exception &e) {
+    spdlog::error("Error switching workspace: {}", e.what());
+  }
+  
+  return true;
 }
 
 }  // namespace waybar::modules::niri
